@@ -20,7 +20,16 @@
     }
     return points;
   }
-  const api={inside,compare};
+  function chartSeries(key, history, visible) {
+    return Object.fromEntries(Object.entries(history)
+      .filter(([source])=>visible(source) && (!['external_temperature','battery'].includes(key)||source==='rs41'))
+      .map(([source,rows])=>[source,rows.map(d=>{
+        if(key==='external_temperature')return {...d,external_temperature:d.temperature};
+        if(key==='internal_temperature'&&source==='tbeam')return {...d,internal_temperature:inside(d)};
+        return d;
+      })]));
+  }
+  const api={inside,compare,chartSeries};
   if(typeof module!=='undefined' && module.exports)module.exports=api;
   else root.HawkeyeThermal=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

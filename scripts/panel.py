@@ -489,10 +489,10 @@ PAGE = r"""<!doctype html>
   <section class="card">
     <div class="controls"><h2 style="margin:0">Lot na żywo</h2><a href="/telemetry.csv" download>Pobierz CSV</a><a href="/telemetry.jsonl" download>Pobierz JSONL</a><label class="hint"><input type="checkbox" id="chart-hour" checked> Ostatnie 60 minut</label></div>
     <div class="legend"><span class="rs" data-source="rs41">● RS41</span><span class="tb" data-source="tbeam">● T-Beam</span></div>
-    <label class="hint"><input type="checkbox" id="show-diagnostics"> Pokaż wykresy diagnostyczne RS41 (temperatura wewnętrzna i napięcie)</label>
+    <label class="hint"><input type="checkbox" id="show-diagnostics"> Pokaż wykres diagnostyczny napięcia RS41</label>
     <p id="thermal-summary" class="hint" hidden></p>
     <div class="flightgrid" id="charts"></div>
-    <p class="hint">Temperatura T-Beama pochodzi z wnętrza gondoli, a zewnętrzna RS41 z otoczenia. ΔT łączy najbliższe próbki według czasu odbioru (do 8 s); nie uzupełnia luk. Nie jest pomiarem współczynnika izolacji ani strumienia ciepła.</p>
+    <p class="hint">Wykres temperatury wewnętrznej porównuje kanał wewnętrzny RS41 i temperaturę T-Beama. Osobny wykres temperatury zewnętrznej pokazuje tylko RS41. ΔT nadal oznacza T-Beam wewnątrz minus RS41 na zewnątrz; łączy próbki według czasu odbioru (do 8 s) i nie uzupełnia luk. Nie jest pomiarem współczynnika izolacji ani strumienia ciepła.</p>
   </section>
   <section class="card">
     <div class="controls"><h2 style="margin:0">Mapa i predykcja</h2><button class="small" id="fit-map">Pokaż cały lot</button><label class="hint"><input type="checkbox" id="follow-map" checked> Śledź pozycję</label><label class="hint"><input type="checkbox" id="map-online"> Włącz podkład mapy (internet)</label></div>
