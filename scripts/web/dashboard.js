@@ -5,13 +5,13 @@
   const history = {rs41: [], tbeam: []}, latest = {};
   let activeTab = 'tbeam';
   const visible = source => activeTab === source || (activeTab === 'compare' && el('show-'+source).checked);
-  const colors = {rs41: '#69a7ff', tbeam: '#13bba4'};
+  const colors = {rs41: '#69a7ff', tbeam: '#13bba4', delta:'#e7a436'};
   const metrics = [
-    ['altitude', 'Wysokość [m AMSL]'], ['temperature', 'Temperatura zewnętrzna [°C]'],
+    ['altitude', 'Wysokość [m AMSL]'], ['temperature', 'Temperatura wnętrza / otoczenia [°C]'], ['delta_temperature', 'Różnica: wnętrze − otoczenie [°C]'],
     ['pressure', 'Ciśnienie [hPa]'], ['humidity', 'Wilgotność [%]'],
     ['ascent_rate', 'Prędkość pionowa [m/s]'], ['snr', 'SNR odbioru [dB]'],
-    ['internal_temperature', 'Temperatura wewnętrzna RS41 [°C]'],
-    ['custom_temperature', 'Temperatura dodatkowa RS41 [°C]'], ['battery', 'Napięcie RS41 [V]']
+    ['internal_temperature', 'Temperatura wewnętrzna RS41 — diagnostyka [°C]'],
+    ['battery', 'Napięcie RS41 — diagnostyka [V]']
   ];
   let radio = {}, prediction = null, busy = false, error = '', dirty = true, mapDirty = true;
   const fmt = (n, digits=1) => typeof n === 'number' && Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -96,10 +96,12 @@
       for(const [key,label,unit] of [
         ['altitude','Wysokość',' m'],['temperature','Temp. zewnętrzna',' °C'],
         ['pressure','Ciśnienie',' hPa'],['humidity','Wilgotność',' %'],['ascent_rate','Prędkość pionowa',' m/s'],
-        ['snr','SNR',' dB'],['internal_temperature','Temp. wewnętrzna',' °C'],
-        ['custom_temperature','Temp. dodatkowa',' °C'],['battery','Napięcie',' V'],['satellites','Satelity','']]){
+        ['snr','SNR',' dB'],['internal_temperature','Temp. wewnętrzna RS41 (diagnostyka)',' °C'],
+        ['battery','Napięcie RS41 (diagnostyka)',' V'],['satellites','Satelity','']]){
         if(s==='tbeam'&&['internal_temperature','custom_temperature','battery','satellites'].includes(key))continue;
-        reading(container,label,fmt(d[key],key==='battery'?3:1)+(d[key]==null?'':unit));
+        const value=key==='temperature'&&s==='tbeam'?HawkeyeThermal.inside(d):d[key];
+        const caption=key==='temperature'?(s==='tbeam'?'Temp. wnętrza gondoli':'Temp. otoczenia'):label;
+        reading(container,caption,fmt(value,key==='battery'?3:1)+(value==null?'':unit));
       }
     }
     const a=radio.audio, fresh=a&&age(a.received_at)<3;
@@ -108,15 +110,35 @@
   }
   function renderCharts(){
     const now=Date.now()/1000, hour=el('chart-hour').checked;
+    const differences=HawkeyeThermal.compare(history.tbeam,history.rs41);
+    let sharedMin=Infinity,sharedMax=-Infinity;
+    for(const [source,rows] of Object.entries(history))if(visible(source))for(const row of rows){
+      if(hour&&row.received_at<=now-3600)continue;
+      sharedMin=Math.min(sharedMin,row.received_at);sharedMax=Math.max(sharedMax,row.received_at);
+    }
+    const lastPair=differences.at(-1);
+    el('thermal-summary').hidden=activeTab!=='compare';
+    el('thermal-summary').textContent=lastPair&&age(lastPair.received_at)<=15&&visible('tbeam')&&visible('rs41')
+      ?`ΔT wnętrze − otoczenie: ${fmt(lastPair.delta_temperature)} °C · odstęp odbioru próbek: ${fmt(lastPair.time_skew_s)} s.`
+      :'ΔT: oczekiwanie na świeże pomiary obu źródeł (maksymalna różnica czasu odbioru 8 s).';
     const css=getComputedStyle(document.body),text=css.getPropertyValue('--muted'),line=css.getPropertyValue('--line');
     for(const [key,canvas] of canvases){
-      const rsOnly=['internal_temperature','custom_temperature','battery'].includes(key);
-      canvas.parentElement.hidden=rsOnly && !visible('rs41');
+      const rsOnly=['internal_temperature','battery'].includes(key);
+      canvas.parentElement.hidden=(rsOnly && (!visible('rs41')||!el('show-diagnostics').checked)) ||
+        (key==='delta_temperature' && !(activeTab==='compare'&&visible('tbeam')&&visible('rs41')));
+      if(key==='temperature') {
+        const label=activeTab==='tbeam'?'Temperatura wnętrza gondoli · T-Beam [°C]':activeTab==='rs41'
+          ?'Temperatura otoczenia · RS41 [°C]':'Temperatura · T-Beam: wnętrze / RS41: otoczenie [°C]';
+        canvas.parentElement.querySelector('h2').textContent=label;canvas.setAttribute('aria-label',label);
+      }
       if(canvas.parentElement.hidden)continue;
       const w=canvas.clientWidth,h=canvas.clientHeight,ratio=devicePixelRatio||1;
       canvas.width=w*ratio;canvas.height=h*ratio;
       const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.font='11px system-ui';
-      const series=Object.fromEntries(Object.entries(history).filter(([s])=>visible(s)).map(([s,rows])=>[s,rows.filter(d=>
+      const input=key==='delta_temperature'?{delta:differences}:Object.fromEntries(
+        Object.entries(history).filter(([s])=>visible(s)&&(!rsOnly||s==='rs41')).map(([s,rows])=>[s,
+          key==='temperature'&&s==='tbeam'?rows.map(d=>({...d,temperature:HawkeyeThermal.inside(d)})):rows]));
+      const series=Object.fromEntries(Object.entries(input).map(([s,rows])=>[s,rows.filter(d=>
         (!hour||d.received_at>now-3600)&&typeof d[key]==='number'&&Number.isFinite(d[key])&&
         (!['altitude','ascent_rate'].includes(key)||d.fix))]));
       const all=Object.values(series).flat();
@@ -124,7 +146,7 @@
       if(!all.length){ctx.fillText('Oczekiwanie na dane…',12,85);continue;}
       let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
       for(const d of all){xmin=Math.min(xmin,d.received_at);xmax=Math.max(xmax,d.received_at);ymin=Math.min(ymin,d[key]);ymax=Math.max(ymax,d[key]);}
-      xmax=Math.max(xmax,xmin+10);const pad=Math.max((ymax-ymin)*.1,.1);ymin-=pad;ymax+=pad;
+      xmin=Number.isFinite(sharedMin)?sharedMin:xmin;xmax=Math.max(sharedMax,xmin+10);const pad=Math.max((ymax-ymin)*.1,.1);ymin-=pad;ymax+=pad;
       const left=58,right=w-12,top=12,bottom=h-28;
       const x=t=>left+(t-xmin)/(xmax-xmin)*(right-left),y=v=>bottom-(v-ymin)/(ymax-ymin)*(bottom-top);
       ctx.strokeStyle=line;ctx.lineWidth=1;
@@ -192,6 +214,7 @@
   setInterval(()=>{if(el('pred-auto').checked)predict();},120000);
   window.addEventListener('resize',()=>{dirty=true;map.invalidateSize();});
   el('chart-hour').onchange=()=>{dirty=true;};
+  el('show-diagnostics').onchange=()=>{dirty=true;};
   function setTab(tab) {
     activeTab=tab;
     for(const button of document.querySelectorAll('[data-tab]')) {

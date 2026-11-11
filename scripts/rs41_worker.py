@@ -14,7 +14,11 @@ from array import array
 
 
 def emit(kind, data):
-    print(json.dumps({"kind": kind, "data": data}, allow_nan=False), flush=True)
+    try:
+        print(json.dumps({"kind": kind, "data": data}, allow_nan=False), flush=True)
+    except BrokenPipeError:
+        # Parent panel has gone away; do not print another exception into its pipe.
+        raise SystemExit(0)
 
 
 def main():

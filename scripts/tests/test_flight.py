@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -15,7 +16,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from flight import Flight, ground_packet, horus_packet, position_ok, build_prediction
-from panel import Hub, ThreadingHTTPServer, make_handler, http_settings
+from panel import Hub, ThreadingHTTPServer, make_handler, http_settings, main
 
 LINE = 'INFO - telemetry #24 fix true 52.17818 21.18629 alt 106.0 m | 995.4 hPa 21.5 C 46.0 %RH | RSSI -91 dBm, SNR 10 dB'
 OPTIONS = dict(source='rs41', phase='ascent', burst_altitude=30000, ascent_rate=5, descent_rate=5)
@@ -45,6 +46,7 @@ class FlightTests(unittest.TestCase):
         p = self.flight.latest['tbeam']
         self.assertTrue(p['fix'])
         self.assertEqual((p['temperature'], p['rssi']), (21.5, -91))
+        self.assertEqual(p['internal_temperature'],21.5)
         self.assertIsNone(ground_packet('INFO - state Safe'))
 
     def test_no_fix_invalid_coordinates_and_zero_satellites(self):
@@ -109,6 +111,22 @@ class FlightTests(unittest.TestCase):
             self.assertIn('192.168.1.20:8000',names)
             self.assertNotIn('attacker.example:8000',names)
             self.assertIn('192.168.1.20',http_settings(True,80)[1])
+
+    def test_occupied_http_port_does_not_start_decoder_or_usb(self):
+        cwd=os.getcwd()
+        with socket.socket() as occupied, tempfile.TemporaryDirectory() as directory:
+            occupied.bind(('127.0.0.1',0));occupied.listen()
+            port=occupied.getsockname()[1]
+            try:
+                os.chdir(directory)
+                with patch('sys.argv',['panel.py','--port','/dev/test','--http-port',str(port)]), \
+                        patch('panel.threading.Thread.start') as start:
+                    with self.assertRaises(SystemExit) as error:
+                        main()
+                    self.assertIn('Nie można uruchomić strony',str(error.exception))
+                    start.assert_not_called()
+            finally:
+                os.chdir(cwd)
 
     def test_lan_host_and_origin_validation(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.hub,'token',set(),15))
@@ -196,7 +214,7 @@ class FlightTests(unittest.TestCase):
         try:
             self.hub.add_line(LINE)
             self.hub.add_line('CRC OK HEX AABBCC',source='rs41')
-            for path in ('/','/dashboard.js','/leaflet.js','/leaflet.css','/telemetry.csv','/telemetry.jsonl','/rs41.log'):
+            for path in ('/','/dashboard.js','/thermal.js','/leaflet.js','/leaflet.css','/telemetry.csv','/telemetry.jsonl','/rs41.log'):
                 with urllib.request.urlopen(base+path,timeout=3) as r:
                     self.assertEqual(r.status,200); self.assertGreater(len(r.read()),0)
             for cmd in ('arm','disarm','poke','fire'):
