@@ -7,7 +7,8 @@ It replaces the serial monitor (only one program can use the port at a time): it
 station's log lines and types `arm` / `fire` / `disarm` into it, exactly as you would in the
 monitor. See PANEL_PL.md and scripts/requirements-panel.txt for setup.
 
-The page only listens on 127.0.0.1 and every command needs a random token that is generated at
+The page listens on 127.0.0.1 by default; --lan enables local-network access.
+Every command needs a random token that is generated at
 start-up and only given to the page itself, so another website open in your browser cannot press
 the buttons.
 """
@@ -20,6 +21,8 @@ import os
 import queue
 import re
 import secrets
+import socket
+import struct
 import sys
 import threading
 import time
@@ -141,7 +144,7 @@ def make_handler(hub, token, host_names, arm_window_s):
             pass
 
         def _host_ok(self):
-            # also blocks DNS-rebinding: the page is only served for the localhost names
+            # Explicit local IP/hostname allowlist also blocks DNS rebinding.
             return self.headers.get("Host", "") in host_names
 
         def _reply(self, code, body, ctype="text/plain; charset=utf-8"):
@@ -245,11 +248,43 @@ def find_port():
     sys.exit("give the serial port of the ground station with --port (found: %s)" % (", ".join(ports) or "none"))
 
 
+def local_ipv4_addresses():
+    """Discover interface addresses without sending data to an internet service."""
+    addresses = {'127.0.0.1'}
+    try:
+        addresses.update(info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
+    except OSError:
+        pass
+    try:
+        import fcntl
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            for _, interface in socket.if_nameindex():
+                try:
+                    request = struct.pack('256s', interface.encode()[:15])
+                    result = fcntl.ioctl(sock.fileno(), 0x8915, request)  # Linux SIOCGIFADDR
+                    addresses.add(socket.inet_ntoa(result[20:24]))
+                except OSError:
+                    pass
+    except (ImportError, OSError):
+        pass
+    return sorted(a for a in addresses if a != '0.0.0.0')
+
+
+def http_settings(lan, port):
+    addresses = local_ipv4_addresses() if lan else ['127.0.0.1']
+    names = {f'{address}:{port}' for address in addresses} | {f'localhost:{port}'}
+    if port == 80:
+        names.update(addresses)
+        names.add('localhost')
+    return ('0.0.0.0' if lan else '127.0.0.1'), names, addresses
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--port", help="serial port of the ground station (default: the only USB serial port)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--http-port", type=int, default=8000, help="port of the web page (default 8000)")
+    ap.add_argument("--lan", action="store_true", help="share the panel on local network interfaces (Wi-Fi/LAN)")
     ap.add_argument("--arm-window", type=int, default=15, help="seconds FIRE is allowed after ARM (ARM_WINDOW_MS)")
     ap.add_argument("--rs41-mode", choices=["audio", "summary", "off"], default="audio")
     ap.add_argument("--audio-port", type=int, default=7355)
@@ -268,7 +303,7 @@ def main():
     hub = Hub(log_path)
     hub.flight = Flight(hub, log_path.removesuffix(".log"), args.callsign or None)
     token = secrets.token_urlsafe(24)
-    host_names = {f"127.0.0.1:{args.http_port}", f"localhost:{args.http_port}"}
+    bind_host, host_names, addresses = http_settings(args.lan, args.http_port)
 
     if port:
         threading.Thread(target=serial_loop, args=(hub, port, args.baud), daemon=True).start()
@@ -283,9 +318,14 @@ def main():
         threading.Thread(target=hub.flight.summary_loop, args=(args.summary_port,), daemon=True).start()
     else:
         hub.flight.radio_status(detail="RS41 wyłączone")
-    server = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(hub, token, host_names, args.arm_window))
+    server = ThreadingHTTPServer((bind_host, args.http_port), make_handler(hub, token, host_names, args.arm_window))
     server.daemon_threads = True
     print(f"panel: http://127.0.0.1:{args.http_port}   log: {log_path}   (Ctrl+C to stop)")
+    if args.lan:
+        for address in addresses:
+            if not address.startswith('127.'):
+                print(f'Wi-Fi/LAN: http://{address}:{args.http_port}', flush=True)
+        print('LAN: urządzenia mające dostęp do strony mogą także używać komend. Używaj zaufanej sieci.', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
