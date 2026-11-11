@@ -1,4 +1,74 @@
-# hawkeye
+# Sonda HAWK · panel RS41 i T-Beam
+
+Lokalna stacja naziemna: odczyty RS41 i T-Beama, osobne zakładki, porównanie
+wykresów i śladów, surowe logi oraz predykcja lądowania z internetu.
+Poniżej zachowano dokumentację firmware Hawkeye.
+
+## Pierwsze uruchomienie na Fedorze
+
+Jednorazowo zainstaluj narzędzia i pobierz projekt do nowego folderu:
+
+```bash
+sudo dnf install git python3-pip python3-devel gcc make libffi-devel
+mkdir -p ~/Projekty
+cd ~/Projekty
+git clone https://github.com/simba-lew/sonda-hawk.git
+cd sonda-hawk
+python3 -m venv .venv
+.venv/bin/python -m pip install -r scripts/requirements-panel.txt
+```
+
+Uruchom demo bez sprzętu:
+
+```bash
+./start.sh --demo
+```
+
+Otwórz http://127.0.0.1:8000 . Zatrzymaj program przez Ctrl+C.
+Z podłączoną stacją naziemną i dźwiękiem z SDRangela:
+
+```bash
+./start.sh --port /dev/ttyUSB0
+```
+
+Horus GUI powinno być zamknięte, ponieważ panel sam dekoduje dźwięk UDP
+na 127.0.0.1:7355. Port USB może mieć inną nazwę.
+Pełna instrukcja ustawień i predykcji: [PANEL_PL.md](PANEL_PL.md).
+
+## Skróty w terminalu
+
+Po sklonowaniu do `~/Projekty/sonda-hawk` dopisz aliasy do `~/.bashrc`:
+
+```bash
+echo 'alias sonda="\"$HOME/Projekty/sonda-hawk/start.sh\" --port /dev/ttyUSB0"' >> ~/.bashrc
+echo 'alias sonda-demo="\"$HOME/Projekty/sonda-hawk/start.sh\" --demo"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Nowe definicje zastępują wcześniejsze aliasy o tych samych nazwach.
+Skrypt `start.sh` sam wybiera środowisko `.venv` i zapisuje logi w folderze projektu.
+
+## Aktualizacja po zatwierdzeniu zmian na GitHubie
+
+Zatrzymaj panel, a potem:
+
+```bash
+cd ~/Projekty/sonda-hawk
+git pull --ff-only
+.venv/bin/python -m pip install -r scripts/requirements-panel.txt
+```
+
+Uruchom `sonda` lub `sonda-demo` i odśwież stronę przez Ctrl+Shift+R.
+`git pull` pobiera tylko zmiany już zatwierdzone w gałęzi `main`.
+Jeśli polecenie zgłosi konflikt lokalnych zmian, zachowaj komunikat i poproś o pomoc.
+Nie trzeba usuwać swojego folderu ani logów.
+
+Kod jest wersjonowany w repozytorium. Środowisko `.venv`, logi i prywatny klucz
+`src/key.rs` są pomijane przez `.gitignore` i pozostają na Twoim komputerze.
+
+---
+
+# Hawkeye · dokumentacja firmware
 
 Firmware for a high-altitude balloon **cutdown**: a radio-controlled release that burns through a
 wire to separate the payload. Written in Rust for the ESP32-S3, in two roles built from

@@ -3,6 +3,8 @@
   'use strict';
   const el = id => document.getElementById(id);
   const history = {rs41: [], tbeam: []}, latest = {};
+  let activeTab = 'tbeam';
+  const visible = source => activeTab === source || (activeTab === 'compare' && el('show-'+source).checked);
   const colors = {rs41: '#69a7ff', tbeam: '#13bba4'};
   const metrics = [
     ['altitude', 'Wysokość [m AMSL]'], ['temperature', 'Temperatura zewnętrzna [°C]'],
@@ -31,24 +33,31 @@
   let predictionLayers=[];
   el('map-online').onchange=()=> el('map-online').checked ? tiles.addTo(map) : map.removeLayer(tiles);
   function bounds() {
-    const layers=Object.values(tracks).filter(l=>l.getLatLngs().length).concat(predictionLayers);
+    const layers=Object.values(tracks).filter(l=>l.getLatLngs().length).concat(predictionLayers.filter(l=>map.hasLayer(l)));
     if(layers.length) map.fitBounds(L.featureGroup(layers).getBounds(),{padding:[30,30],maxZoom:14});
   }
   el('fit-map').onclick=bounds;
   function popup(text){const d=document.createElement('div');d.textContent=text;return d;}
   function renderMap() {
     for(const s of Object.keys(history)) {
-      const pts=history[s].filter(d=>d.fix).map(d=>[d.latitude,d.longitude]);
+      const pts=visible(s)?history[s].filter(d=>d.fix).map(d=>[d.latitude,d.longitude]):[];
       tracks[s].setLatLngs(pts);
+      if(markers[s] && (!visible(s) || !pts.length)) map.removeLayer(markers[s]);
       if(!pts.length) continue;
       if(!markers[s]) markers[s]=L.circleMarker(pts.at(-1),{radius:7,color:colors[s],fillOpacity:1}).addTo(map);
       else markers[s].setLatLng(pts.at(-1));
+      if(!map.hasLayer(markers[s])) markers[s].addTo(map);
       const d=history[s].filter(d=>d.fix).at(-1);
       markers[s].bindPopup(popup(`${d.callsign}: ${fmt(d.altitude,0)} m AMSL · ${new Date(d.received_at*1000).toLocaleTimeString()}`));
     }
     if(el('follow-map').checked) {
-      const valid=Object.values(latest).filter(d=>d.fix).sort((a,b)=>b.received_at-a.received_at);
+      const valid=Object.values(latest).filter(d=>d.fix && visible(d.source)).sort((a,b)=>b.received_at-a.received_at);
       if(valid.length) map.panTo([valid[0].latitude,valid[0].longitude]);
+    }
+    for(const layer of predictionLayers) {
+      if(prediction && visible(prediction.source)) {
+        if(!map.hasLayer(layer)) layer.addTo(map);
+      } else if(map.hasLayer(layer)) map.removeLayer(layer);
     }
   }
   function drawPrediction(p) {
@@ -63,10 +72,12 @@
     predictionLayers.push(L.circleMarker([d.latitude,d.longitude],{color:'#e7a436',radius:10,fillOpacity:.35})
       .addTo(map).bindPopup(popup('Przewidywane lądowanie: '+new Date(d.datetime).toLocaleString())));
     updatePredictionText();
+    mapDirty=true;
   }
   function updatePredictionText(){
     if(!prediction)return;
     const p=prediction, d=p.landing, seconds=(new Date(d.datetime)-Date.now())/1000;
+    el('prediction-result').hidden=!visible(p.source);
     el('prediction-result').textContent=`${p.source==='rs41'?'RS41':'T-Beam'} · lądowanie: ${fmt(d.latitude,5)}, ${fmt(d.longitude,5)} · ${new Date(d.datetime).toLocaleString()}${seconds>0?' · za około '+Math.round(seconds/60)+' min':''} · obliczono ${new Date(p.created_at*1000).toLocaleTimeString()} (${Math.round(age(p.created_at))} s temu). Szacunek dla podanych parametrów lotu.`;
   }
   function reading(container,label,text) {
@@ -99,10 +110,13 @@
     const now=Date.now()/1000, hour=el('chart-hour').checked;
     const css=getComputedStyle(document.body),text=css.getPropertyValue('--muted'),line=css.getPropertyValue('--line');
     for(const [key,canvas] of canvases){
+      const rsOnly=['internal_temperature','custom_temperature','battery'].includes(key);
+      canvas.parentElement.hidden=rsOnly && !visible('rs41');
+      if(canvas.parentElement.hidden)continue;
       const w=canvas.clientWidth,h=canvas.clientHeight,ratio=devicePixelRatio||1;
       canvas.width=w*ratio;canvas.height=h*ratio;
       const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.font='11px system-ui';
-      const series=Object.fromEntries(Object.entries(history).map(([s,rows])=>[s,rows.filter(d=>
+      const series=Object.fromEntries(Object.entries(history).filter(([s])=>visible(s)).map(([s,rows])=>[s,rows.filter(d=>
         (!hour||d.received_at>now-3600)&&typeof d[key]==='number'&&Number.isFinite(d[key])&&
         (!['altitude','ascent_rate'].includes(key)||d.fix))]));
       const all=Object.values(series).flat();
@@ -143,6 +157,18 @@
     dirty=true;mapDirty=true;predictionStatus();
   });
   es.addEventListener('telemetry',e=>ingest(JSON.parse(e.data)));
+  const rsLog=el('rs-log');
+  es.addEventListener('line',e=>{
+    const entry=JSON.parse(e.data);
+    if(entry.source!=='rs41')return;
+    const row=document.createElement('div'),stamp=document.createElement('span'),message=document.createElement('span');
+    stamp.className='t';stamp.textContent=entry.t+'  ';message.textContent=entry.line;
+    row.append(stamp,message);rsLog.append(row);
+    while(rsLog.childElementCount>3000)rsLog.firstChild.remove();
+    if(el('rs-follow').checked)rsLog.scrollTop=rsLog.scrollHeight;
+  });
+  el('rs-clear').onclick=()=>rsLog.replaceChildren();
+  rsLog.addEventListener('scroll',()=>{if(rsLog.scrollTop+rsLog.clientHeight<rsLog.scrollHeight-8)el('rs-follow').checked=false;});
   es.addEventListener('radio',e=>{radio=JSON.parse(e.data);});
   es.addEventListener('prediction',e=>drawPrediction(JSON.parse(e.data)));
   es.addEventListener('prediction_status',e=>{const d=JSON.parse(e.data);busy=d.busy;error=d.error;predictionStatus();});
@@ -166,6 +192,44 @@
   setInterval(()=>{if(el('pred-auto').checked)predict();},120000);
   window.addEventListener('resize',()=>{dirty=true;map.invalidateSize();});
   el('chart-hour').onchange=()=>{dirty=true;};
+  function setTab(tab) {
+    activeTab=tab;
+    for(const button of document.querySelectorAll('[data-tab]')) {
+      const selected=button.dataset.tab===tab;
+      button.setAttribute('aria-selected',String(selected));
+      button.tabIndex=selected?0:-1;
+    }
+    for(const section of document.querySelectorAll('[data-view]')) section.hidden=section.dataset.view!==tab;
+    for(const section of document.querySelectorAll('[data-source]')) section.hidden=!visible(section.dataset.source);
+    el('comparison-options').hidden=tab!=='compare';
+    el('compare-log-hint').hidden=tab!=='compare';
+    if(tab!=='compare')el('pred-source').value=tab;
+    el('pred-source').disabled=tab!=='compare';
+    dirty=true;mapDirty=true;
+    renderCharts();renderMap();updatePredictionText();map.invalidateSize();
+    if(el('follow').checked)document.getElementById('log').scrollTop=document.getElementById('log').scrollHeight;
+    if(el('rs-follow').checked)rsLog.scrollTop=rsLog.scrollHeight;
+  }
+  const tabs=[...document.querySelectorAll('[data-tab]')];
+  for(const button of tabs) {
+    button.onclick=()=>setTab(button.dataset.tab);
+    button.onkeydown=e=>{
+      if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+      e.preventDefault();
+      let i=tabs.indexOf(button);
+      i=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+      setTab(tabs[i].dataset.tab);tabs[i].focus();
+    };
+  }
+  el('show-tbeam').onchange=()=>setTab('compare');
+  el('show-rs41').onchange=()=>setTab('compare');
   setInterval(()=>{renderCards();updatePredictionText();if(dirty){renderCharts();dirty=false;}if(mapDirty){renderMap();mapDirty=false;}},1000);
   renderCards();
+  setTab('tbeam');
+  const stream=new EventSource('/events');
+  for(const type of ['line','status','snapshot','telemetry','radio','prediction','prediction_status']) {
+    stream.addEventListener(type,e=>es.dispatchEvent(new MessageEvent(type,{data:e.data})));
+  }
+  stream.onerror=()=>{if(es.onerror)es.onerror();};
+  window.addEventListener('beforeunload',()=>stream.close());
 })();

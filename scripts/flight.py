@@ -128,6 +128,14 @@ class Flight:
             self.csv.writerow(d)
         self.event('telemetry', d)
 
+    def receive_horus(self, d, transport='DECODED'):
+        packet = horus_packet(d)
+        if self.callsign and packet['callsign'] != self.callsign:
+            return
+        # Keep the decoder output before normalization and duplicate filtering.
+        self.hub.add_line(f'[{transport}] ' + json.dumps(d, ensure_ascii=False, allow_nan=False), source='rs41')
+        self.ingest(packet)
+
     def snapshot(self):
         with self.lock:
             return dict(history={s: list(v) for s, v in self.history.items()},
@@ -136,9 +144,12 @@ class Flight:
 
     def radio_status(self, **kwargs):
         with self.lock:
+            changed = 'detail' in kwargs and kwargs['detail'] != self.radio.get('detail')
             self.radio.update(kwargs)
             data = dict(self.radio)
         self.event('radio', data)
+        if changed:
+            self.hub.add_line('[decoder] ' + kwargs['detail'], source='rs41')
 
     def start_prediction(self, options):
         source = options.get('source')
@@ -209,15 +220,17 @@ class Flight:
                         msg = json.loads(line)
                         kind, data = msg['kind'], msg['data']
                         if kind == 'packet':
-                            self.ingest(horus_packet(data))
+                            self.receive_horus(data)
+                        elif kind == 'raw':
+                            self.hub.add_line(data, source='rs41')
                         elif kind == 'audio':
                             self.radio_status(audio=data)
                         elif kind in ('status', 'error'):
                             self.radio_status(detail=data)
                         elif kind == 'warning':
-                            self.hub.add_line('[RS41] ' + data)
+                            self.hub.add_line('[RS41] ' + data, source='rs41')
                     except (ValueError, TypeError, KeyError) as e:
-                        self.hub.add_line('[RS41] Błąd ramki: ' + str(e))
+                        self.hub.add_line('[RS41] Błąd ramki: ' + str(e), source='rs41')
                 code = self.worker.wait()
                 if not self.stop.is_set():
                     self.radio_status(detail=f'Dekoder zatrzymany ({code}). Sprawdź terminal/zależności i zamknij Horus GUI. Ponowienie za 10 s.', audio=None)
@@ -238,11 +251,11 @@ class Flight:
                         raw = sock.recv(65535)
                         d = json.loads(raw)
                         if d.get('type') == 'PAYLOAD_SUMMARY':
-                            self.ingest(horus_packet(d))
+                            self.receive_horus(d, 'UDP JSON')
                     except socket.timeout:
                         pass
                     except (ValueError, TypeError, AttributeError) as e:
-                        self.hub.add_line('[RS41] Pominięto błędny UDP: ' + str(e))
+                        self.hub.add_line('[RS41] Pominięto błędny UDP: ' + str(e), source='rs41')
         except OSError as e:
             self.radio_status(detail='Błąd UDP: ' + str(e))
 

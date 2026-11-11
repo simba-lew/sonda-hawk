@@ -51,19 +51,22 @@ class Hub:
         self.flight = None
         self.log_path = log_path
         self.log_file = open(log_path, "a", buffering=1, encoding="utf-8")
+        self.rs41_log_path = log_path.removesuffix('.log') + '-rs41.log'
+        self.rs41_log_file = open(self.rs41_log_path, "a", buffering=1, encoding="utf-8")
 
     def _publish(self, event, data):
         for q in list(self.clients):
             q.put((event, data))
 
-    def add_line(self, text):
+    def add_line(self, text, source="tbeam"):
         now = datetime.datetime.now()
-        entry = {"t": now.strftime("%H:%M:%S.") + f"{now.microsecond // 1000:03d}", "ts": now.timestamp(), "line": text}
+        entry = {"t": now.strftime("%H:%M:%S.") + f"{now.microsecond // 1000:03d}", "ts": now.timestamp(), "line": text, "source": source}
         with self.lock:
             self.lines.append(entry)
-            self.log_file.write(f"{entry['t']} {text}\n")
+            target = self.rs41_log_file if source == 'rs41' else self.log_file
+            target.write(f"{entry['t']} {text}\n")
             self._publish("line", entry)
-        if self.flight:
+        if self.flight and source == 'tbeam':
             packet = ground_packet(text)
             if packet:
                 self.flight.ingest(packet)
@@ -172,8 +175,8 @@ def make_handler(hub, token, host_names, arm_window_s):
                 with hub.flight.lock:
                     data = Path(path).read_bytes()
                 return self._reply(200, data, "text/csv" if path.endswith("csv") else "application/x-ndjson")
-            if self.path == "/log":
-                with open(hub.log_path, "rb") as f:
+            if self.path in ("/log", "/rs41.log"):
+                with open(hub.rs41_log_path if self.path == '/rs41.log' else hub.log_path, "rb") as f:
                     return self._reply(200, f.read())
             if self.path == "/events":
                 return self._events()
@@ -374,6 +377,12 @@ PAGE = r"""<!doctype html>
   input[type=checkbox] {width:auto} #prediction-message {white-space:pre-wrap}
   .leaflet-container {color:#1c2026} .leaflet-popup-content {color:#1c2026}
   .logcard #log {flex-basis:260px}
+  [hidden] {display:none !important}
+  .tabs {display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
+  .tabs [aria-selected=true] {background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .comparison-options {display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .rawlog {background:var(--logbg);color:var(--logtext);border-radius:8px;padding:10px;flex:1;min-height:0;overflow:auto;font:12.5px/1.45 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+  .rawlog .t {color:#8d97a6}
 </style>
 </head>
 <body>
@@ -383,9 +392,20 @@ PAGE = r"""<!doctype html>
     <span id="conn" class="pill bad">connecting...</span>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="Źródło telemetrii">
+    <button role="tab" id="tab-tbeam" data-tab="tbeam" aria-selected="true">T-Beam</button>
+    <button role="tab" id="tab-rs41" data-tab="rs41" aria-selected="false">RS41</button>
+    <button role="tab" id="tab-compare" data-tab="compare" aria-selected="false">Porównanie / nakładanie</button>
+  </nav>
+  <div class="comparison-options card" id="comparison-options" hidden>
+    <strong>Nałóż na wykresy i mapę:</strong>
+    <label><input id="show-tbeam" type="checkbox" checked> T-Beam</label>
+    <label><input id="show-rs41" type="checkbox" checked> RS41</label>
+  </div>
   <div id="alarm" class="banner"></div>
 
-  <section class="card">
+  <section class="card" data-view="tbeam" id="command-card">
+    <h2>Komendy T-Beam</h2>
     <div class="controls">
       <span id="state" class="state">?</span>
       <button class="arm" id="arm">ARM</button>
@@ -397,7 +417,7 @@ PAGE = r"""<!doctype html>
     <p class="hint" id="hint" style="margin-bottom:0">ARM asks the balloon for a one-time code. When it reports READY, FIRE is enabled until the balloon's arm window (<span id="win"></span> s) ends and it drops back to SAFE by itself. The state is updated by each answer to a command or POKE and by the balloon's own reports (periodically and on each change); POKE also tells how well the balloon heard us.</p>
   </section>
 
-  <section class="card">
+  <section class="card" hidden>
     <div class="grid">
       <div class="stat"><div class="k">Last telemetry</div><div class="v" id="age">-</div></div>
       <div class="stat"><div class="k">State as of</div><div class="v" id="sage">-</div></div>
@@ -413,17 +433,17 @@ PAGE = r"""<!doctype html>
   </section>
 
   <div class="flightgrid">
-    <section class="card"><div class="sourcehead"><h2>RS41 <small id="rs-callsign"></small></h2><span id="rs-age">Brak danych</span></div><div id="rs-readings" class="readings"></div><p id="rs-radio" class="hint"></p></section>
-    <section class="card"><div class="sourcehead"><h2>T-Beam</h2><span id="tb-age">Brak danych</span></div><div id="tb-readings" class="readings"></div><p class="hint">Telemetria i komendy przez stację USB. Przyciski ARM / FIRE / DISARM / POKE pozostają powyżej.</p></section>
+    <section class="card" data-source="rs41"><div class="sourcehead"><h2>RS41 <small id="rs-callsign"></small></h2><span id="rs-age">Brak danych</span></div><div id="rs-readings" class="readings"></div><p id="rs-radio" class="hint"></p></section>
+    <section class="card" data-source="tbeam"><div class="sourcehead"><h2>T-Beam</h2><span id="tb-age">Brak danych</span></div><div id="tb-readings" class="readings"></div><p class="hint">Telemetria i komendy przez stację USB. Przyciski ARM / FIRE / DISARM / POKE pozostają powyżej.</p></section>
   </div>
   <section class="card">
     <div class="controls"><h2 style="margin:0">Lot na żywo</h2><a href="/telemetry.csv" download>Pobierz CSV</a><a href="/telemetry.jsonl" download>Pobierz JSONL</a><label class="hint"><input type="checkbox" id="chart-hour" checked> Ostatnie 60 minut</label></div>
-    <div class="legend"><span class="rs">● RS41</span><span class="tb">● T-Beam</span></div>
+    <div class="legend"><span class="rs" data-source="rs41">● RS41</span><span class="tb" data-source="tbeam">● T-Beam</span></div>
     <div class="flightgrid" id="charts"></div>
   </section>
   <section class="card">
     <div class="controls"><h2 style="margin:0">Mapa i predykcja</h2><button class="small" id="fit-map">Pokaż cały lot</button><label class="hint"><input type="checkbox" id="follow-map" checked> Śledź pozycję</label><label class="hint"><input type="checkbox" id="map-online"> Włącz podkład mapy (internet)</label></div>
-    <div class="legend"><span class="rs">● RS41</span><span class="tb">● T-Beam</span><span class="pr">┄ Predykcja</span></div>
+    <div class="legend"><span class="rs" data-source="rs41">● RS41</span><span class="tb" data-source="tbeam">● T-Beam</span><span class="pr">┄ Predykcja</span></div>
     <div id="flightmap"></div>
     <p class="hint">Ślady działają offline. Podkład OpenStreetMap wymaga internetu. Predykcja wysyła wybraną pozycję i parametry lotu do SondeHub/Tawhiri.</p>
     <form id="prediction-form" class="predictionform">
@@ -439,9 +459,9 @@ PAGE = r"""<!doctype html>
     <p id="prediction-message" class="hint">Predykcja nie została jeszcze obliczona.</p>
     <p id="prediction-result"></p>
   </section>
-  <section class="card logcard">
+  <section class="card logcard" data-view="tbeam" id="tbeam-log-card">
     <div class="logtools">
-      <strong>Log</strong>
+      <strong>Surowy log T-Beam · USB</strong>
       <label><input type="checkbox" id="hideTel"> hide telemetry lines</label>
       <label><input type="checkbox" id="hideState"> hide state lines</label>
       <label><input type="checkbox" id="follow" checked> follow</label>
@@ -451,6 +471,18 @@ PAGE = r"""<!doctype html>
     </div>
     <div id="log"></div>
   </section>
+  <section class="card logcard" data-view="rs41" id="rs41-log-card" hidden>
+    <div class="logtools">
+      <strong>Surowy log RS41 · HEX / JSON</strong>
+      <label><input type="checkbox" id="rs-follow" checked> Przewijaj</label>
+      <span class="spacer"></span>
+      <button class="small" id="rs-clear">Wyczyść widok</button>
+      <a href="/rs41.log" download="rs41.log">Pobierz log RS41</a>
+    </div>
+    <div id="rs-log" class="rawlog" role="log" aria-label="Surowe ramki i log dekodera RS41"></div>
+    <p class="hint">HEX to odebrane ramki radiowe, JSON to pełne pola zwrócone przez dekoder. W trybie Horus GUI dostępny jest tylko JSON UDP. Demo pokazuje oznaczone dane syntetyczne.</p>
+  </section>
+  <p class="hint" id="compare-log-hint" hidden>Pełne surowe logi znajdziesz w zakładkach T-Beam i RS41. Oba odbiorniki i zapis działają również w tle.</p>
 </main>
 
 <dialog id="confirm">
@@ -583,8 +615,9 @@ $("hideState").onchange = applyFilters;
 $("clear").onclick = () => { log.textContent = ""; };
 log.addEventListener("scroll", () => { if (log.scrollTop + log.clientHeight < log.scrollHeight - 8) $("follow").checked = false; });
 
-const es = new EventSource("/events");
-es.addEventListener("line", e => { const entry = JSON.parse(e.data); addLine(entry); onLine(entry.line, entry.ts * 1000); });
+// Register both dashboard and log listeners before opening the SSE stream.
+const es = new EventTarget();
+es.addEventListener("line", e => { const entry = JSON.parse(e.data); if (entry.source !== "rs41") { addLine(entry); onLine(entry.line, entry.ts * 1000); } });
 es.addEventListener("status", e => {
   const s = JSON.parse(e.data);
   connected = s.connected;
