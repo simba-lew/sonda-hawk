@@ -11,7 +11,7 @@
     ['external_temperature', 'Temperatura zewnętrzna · RS41 [°C]'], ['delta_temperature', 'Różnica: wnętrze T-Beam − otoczenie RS41 [°C]'],
     ['pressure', 'Ciśnienie [hPa]'], ['humidity', 'Wilgotność [%]'],
     ['ascent_rate', 'Prędkość pionowa [m/s]'], ['snr', 'SNR odbioru [dB]'],
-    ['battery', 'Napięcie RS41 — diagnostyka [V]']
+    ['battery', 'Napięcie baterii RS41 [V]']
   ];
   let radio = {}, prediction = null, busy = false, error = '', dirty = true, mapDirty = true;
   const fmt = (n, digits=1) => typeof n === 'number' && Number.isFinite(n) ? n.toFixed(digits) : '—';
@@ -97,7 +97,7 @@
         ['altitude','Wysokość',' m'],['temperature','Temp. zewnętrzna',' °C'],
         ['pressure','Ciśnienie',' hPa'],['humidity','Wilgotność',' %'],['ascent_rate','Prędkość pionowa',' m/s'],
         ['snr','SNR',' dB'],['internal_temperature','Temp. wewnętrzna RS41',' °C'],
-        ['battery','Napięcie RS41 (diagnostyka)',' V'],['satellites','Satelity','']]){
+        ['battery','Napięcie baterii RS41',' V'],['satellites','Satelity','']]){
         if(s==='tbeam'&&['internal_temperature','custom_temperature','battery','satellites'].includes(key))continue;
         const value=key==='temperature'&&s==='tbeam'?HawkeyeThermal.inside(d):d[key];
         const caption=key==='temperature'?(s==='tbeam'?'Temp. wnętrza gondoli':'Temp. otoczenia'):label;
@@ -123,7 +123,7 @@
       :'ΔT: oczekiwanie na świeże pomiary obu źródeł (maksymalna różnica czasu odbioru 8 s).';
     const css=getComputedStyle(document.body),text=css.getPropertyValue('--muted'),line=css.getPropertyValue('--line');
     for(const [key,canvas] of canvases){
-      canvas.parentElement.hidden=(key==='battery' && (!visible('rs41')||!el('show-diagnostics').checked)) ||
+      canvas.parentElement.hidden=(key==='battery' && !visible('rs41')) ||
         (key==='external_temperature' && !visible('rs41')) ||
         (key==='delta_temperature' && !(activeTab==='compare'&&visible('tbeam')&&visible('rs41')));
       if(key==='internal_temperature') {
@@ -212,7 +212,6 @@
   setInterval(()=>{if(el('pred-auto').checked)predict();},120000);
   window.addEventListener('resize',()=>{dirty=true;map.invalidateSize();});
   el('chart-hour').onchange=()=>{dirty=true;};
-  el('show-diagnostics').onchange=()=>{dirty=true;};
   function setTab(tab) {
     activeTab=tab;
     for(const button of document.querySelectorAll('[data-tab]')) {
