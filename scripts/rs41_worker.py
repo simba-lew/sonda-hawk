@@ -28,6 +28,8 @@ def main():
     from horusdemodlib.decoder import decode_packet
 
     def on_frame(frame):
+        if frame.data:
+            emit('raw', f"CRC {'OK' if frame.crc_pass else 'BAD'} HEX {frame.data.hex().upper()}")
         if not frame.crc_pass or not frame.data:
             return
         try:

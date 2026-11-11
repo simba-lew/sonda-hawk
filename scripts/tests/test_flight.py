@@ -31,6 +31,7 @@ class FlightTests(unittest.TestCase):
     def tearDown(self):
         self.flight.close()
         self.hub.log_file.close()
+        self.hub.rs41_log_file.close()
         self.tmp.cleanup()
 
     def packet(self, **extra):
@@ -98,6 +99,21 @@ class FlightTests(unittest.TestCase):
                            longitude=21,altitude=100,sats=0,batt_voltage=3.7))
         self.assertFalse(d['fix']);self.assertEqual(d['battery'],3.7)
 
+    def test_raw_logs_are_separate_and_include_duplicate_frames(self):
+        packet=dict(callsign='HAWK',sequence_number=12,latitude=52,longitude=21,
+                    altitude=106,satellites=8,raw_hex='0123AABB',ext_temperature=21.5)
+        self.flight.receive_horus(packet)
+        self.flight.receive_horus(packet)
+        self.hub.add_line(LINE)
+        rs41=Path(self.hub.rs41_log_path).read_text()
+        ground=Path(self.hub.log_path).read_text()
+        self.assertEqual(rs41.count('0123AABB'),2)
+        self.assertNotIn('0123AABB',ground)
+        self.assertIn('telemetry #24',ground)
+        self.assertNotIn('telemetry #24',rs41)
+        self.assertEqual(len(self.flight.history['rs41']),1)
+        self.assertTrue(all(e['source']=='rs41' for e in list(self.hub.lines)[:2]))
+
     def test_prediction_parameters_stale_and_descent(self):
         self.flight.ingest(self.packet())
         d=self.flight.latest['rs41']
@@ -142,7 +158,8 @@ class FlightTests(unittest.TestCase):
                 headers={'Content-Type':'application/json','X-Token':token}),timeout=3)
         try:
             self.hub.add_line(LINE)
-            for path in ('/','/dashboard.js','/leaflet.js','/leaflet.css','/telemetry.csv','/telemetry.jsonl'):
+            self.hub.add_line('CRC OK HEX AABBCC',source='rs41')
+            for path in ('/','/dashboard.js','/leaflet.js','/leaflet.css','/telemetry.csv','/telemetry.jsonl','/rs41.log'):
                 with urllib.request.urlopen(base+path,timeout=3) as r:
                     self.assertEqual(r.status,200); self.assertGreater(len(r.read()),0)
             for cmd in ('arm','disarm','poke','fire'):

@@ -50,6 +50,18 @@ Nie uruchamiaj panelu przez sudo. Port i jego uprawnienia zależą od konfigurac
 
 ## Co pokazuje panel
 
+Panel ma trzy zakładki: **T-Beam**, **RS41** i **Porównanie / nakładanie**.
+Każda zakładka pojedynczego źródła pokazuje jego odczyty, wykresy, ślad na mapie
+i osobny surowy log. Komendy są w zakładce T-Beam. W porównaniu można niezależnie
+włączać serie T-Beama i RS41 na wspólnych osiach oraz mapie. Oba źródła odbierają
+i zapisują dane także wtedy, kiedy ich zakładka jest ukryta.
+
+Log T-Beama (`/log`) zawiera linie portu USB, a log RS41 (`/rs41.log`) ramki HEX,
+wynik dekodera JSON i jego komunikaty. Są osobne przyciski pobierania i przewijania.
+Plik RS41 ma nazwę `logs/panel-*-rs41.log`. Log zapisuje również powtórzone ramki,
+choć historia wykresu odrzuca duplikaty. Tryb demo oznacza swoje logi jako syntetyczne
+i nie udaje prawdziwych ramek HEX. Logi dotyczą zdekodowanych ramek, nie nagrania audio/IQ.
+
 - Dotychczasowe komendy ARM, FIRE, DISARM, POKE oraz log stacji naziemnej.
 - Oddzielne odczyty RS41 i T-Beama, czas od ostatniego pakietu i status audio.
 - Dziewięć wykresów: wysokość, temperatura zewnętrzna, ciśnienie, wilgotność,

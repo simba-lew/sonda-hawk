@@ -1,0 +1,20 @@
+# Keep compilation settings in this file and user/runtime settings in `esp-config.toml`.
+include = ["esp-config.toml"]
+
+[target.xtensa-esp32s3-none-elf]
+runner = "espflash flash --monitor --chip esp32s3"
+
+[build]
+rustflags = [
+  "-C", "link-arg=-nostartfiles",
+]
+
+target = "xtensa-esp32s3-none-elf"
+
+[unstable]
+build-std = ["core"]
+
+[env]
+# lora-phy logs through defmt, which this firmware does not use (it logs with `log`).
+# "off" turns every defmt macro, in all crates, into nothing, so no defmt logger is needed.
+DEFMT_LOG = "off"
