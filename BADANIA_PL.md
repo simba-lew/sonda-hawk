@@ -4,8 +4,8 @@
 
 - Temperatura T-Beama: wnętrze gondoli, w miejscu zamontowania czujnika.
 - Zewnętrzna temperatura RS41: otoczenie; czujnik musi znajdować się poza gondolą.
-- Wewnętrzna temperatura RS41: osobny kanał diagnostyczny sondy, nie zamiennik
-  temperatury gondoli ani akumulatora. Wykres jest domyślnie ukryty.
+- Wewnętrzna temperatura RS41: kanał wewnętrzny sondy, porównywany na wspólnym
+  wykresie z temperaturą T-Beama. Odczyt zależy od miejsca umieszczenia czujnika.
 - Nieopisany kanał dodatkowej temperatury usunięto z kart i wykresów. Nadal pozostaje
   w surowych danych, aby nie tracić informacji z ramki.
 - Napięcie RS41 jest diagnostyczne. Przed analizą trzeba sprawdzić skalowanie
@@ -16,16 +16,17 @@ od `source`. Dla T-Beama dodatkowo zapisuje się `internal_temperature`.
 
 ## Wykresy w panelu
 
-Najważniejszy jest wspólny wykres temperatury: T-Beam wewnątrz, RS41 na zewnątrz.
-Zakładki pojedynczych źródeł pokazują odpowiedni kanał. W porównaniu jest też
+Są dwa oddzielne wykresy temperatury: **wewnętrzna RS41 i T-Beama razem** oraz
+**zewnętrzna tylko z RS41**. W zakładkach pojedynczych źródeł serie są odpowiednio
+filtrowane; oba kanały wewnętrzne nakładają się w Porównaniu. W porównaniu jest też
 **ΔT = T_wewnątrz − T_otoczenia**. Dodatnia wartość oznacza cieplejsze wnętrze.
 Próbki dobieramy według najbliższego czasu odbioru, z limitem 8 s. Nie interpolujemy
 ani nie uzupełniamy braków. Czas odbioru nie gwarantuje identycznego czasu pomiaru
 w dwóch urządzeniach; trzeba uwzględnić opóźnienie transmisji i bezwładność czujników.
 
 Wszystkie wykresy czasowe używają wspólnego zakresu osi czasu. Pozostają wysokość,
-prędkość pionowa, ciśnienie, wilgotność oraz SNR. Temperatura wewnętrzna RS41 i napięcie
-są dostępne po włączeniu diagnostyki. SNR dwóch modemów służy do oceny każdego łącza,
+prędkość pionowa, ciśnienie, wilgotność oraz SNR. Temperatura wewnętrzna jest widoczna domyślnie;
+wykres napięcia RS41 jest dostępny po włączeniu diagnostyki. SNR dwóch modemów służy do oceny każdego łącza,
 nie do bezpośredniego porównania ich wydajności.
 
 W kolejnej wersji warto dodać profil temperatury otoczenia względem wysokości,

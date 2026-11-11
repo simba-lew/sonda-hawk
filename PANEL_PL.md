@@ -64,10 +64,12 @@ i nie udaje prawdziwych ramek HEX. Logi dotyczą zdekodowanych ramek, nie nagran
 
 - Dotychczasowe komendy ARM, FIRE, DISARM, POKE oraz log stacji naziemnej.
 - Oddzielne odczyty RS41 i T-Beama, czas od ostatniego pakietu i status audio.
-- Wykresy: wysokość, temperatura (T-Beam: wnętrze gondoli, RS41: otoczenie),
+- Wykresy: wysokość, temperatura wewnętrzna (RS41 i T-Beam razem),
+  osobno temperatura zewnętrzna (tylko RS41),
   ciśnienie, wilgotność, prędkość pionowa i SNR. W porównaniu dochodzi ΔT wnętrze
   minus otoczenie z doborem próbek do 8 s odstępu odbioru. Osie czasu są wspólne.
-  Wykresy diagnostyczne temperatury wewnętrznej RS41 i napięcia są domyślnie ukryte.
+  Wykres temperatury wewnętrznej jest widoczny domyślnie;
+  diagnostyczny wykres napięcia RS41 jest domyślnie ukryty.
   Nieopisany kanał dodatkowej temperatury pozostaje tylko w danych, nie w widoku.
   Propozycje badań i interpretacja: `BADANIA_PL.md`.
 - Pozycje i ślady obu źródeł. „Włącz podkład mapy” pobiera kafelki OpenStreetMap;
