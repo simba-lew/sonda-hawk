@@ -48,7 +48,39 @@ source ~/.bashrc
 Nowe definicje zastępują wcześniejsze aliasy o tych samych nazwach.
 Skrypt `start.sh` sam wybiera środowisko `.venv` i zapisuje logi w folderze projektu.
 
-## Aktualizacja po zatwierdzeniu zmian na GitHubie
+## Dostęp przez Wi-Fi / LAN
+
+Telefon i laptop muszą być w tej samej sieci lokalnej. Uruchom panel z opcją:
+
+```bash
+sonda --lan
+# lub test bez sprzętu:
+sonda-demo --lan
+```
+
+Bez aliasów: `./start.sh --lan --port /dev/ttyUSB0` lub `./start.sh --demo --lan`.
+Terminal wypisze adresy `Wi-Fi/LAN: http://...:8000`. Na telefonie otwórz adres
+IP laptopa z sieci Wi-Fi, np. `http://192.168.1.20:8000`, nie `localhost`.
+Wszystkie zakładki, logi, wykresy i komendy działają w przeglądarce telefonu.
+Opcja udostępnia panel na interfejsach IPv4 laptopa, także Ethernet.
+Osoby mające dostęp do strony mogą używać komend; ten tryb jest dla zaufanej sieci.
+
+Jeśli Fedora blokuje połączenie, w drugim terminalu tymczasowo otwórz port
+w domyślnej strefie zapory:
+
+```bash
+sudo firewall-cmd --add-port=8000/tcp
+```
+
+Reguła działa do przeładowania zapory lub restartu. Aby ją usunąć:
+`sudo firewall-cmd --remove-port=8000/tcp`. Jeśli Wi-Fi ma przypisaną inną strefę,
+sprawdź `firewall-cmd --get-active-zones` i użyj `--zone=NAZWA_STREFY`.
+Nie trzeba przekierowywać portów w routerze. Sieć gościnna lub izolacja klientów
+w routerze może uniemożliwiać połączenie urządzeń. Po zmianie adresu IP zrestartuj panel.
+
+Bez `--lan` strona pozostaje dostępna tylko na laptopie.
+
+## Pobieranie aktualizacji
 
 Zatrzymaj panel, a potem:
 

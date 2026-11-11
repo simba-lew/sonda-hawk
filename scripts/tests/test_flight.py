@@ -15,7 +15,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from flight import Flight, ground_packet, horus_packet, position_ok, build_prediction
-from panel import Hub, ThreadingHTTPServer, make_handler
+from panel import Hub, ThreadingHTTPServer, make_handler, http_settings
 
 LINE = 'INFO - telemetry #24 fix true 52.17818 21.18629 alt 106.0 m | 995.4 hPa 21.5 C 46.0 %RH | RSSI -91 dBm, SNR 10 dB'
 OPTIONS = dict(source='rs41', phase='ascent', burst_altitude=30000, ascent_rate=5, descent_rate=5)
@@ -98,6 +98,43 @@ class FlightTests(unittest.TestCase):
         d=horus_packet(dict(type='PAYLOAD_SUMMARY',callsign='HAWK',latitude=52,
                            longitude=21,altitude=100,sats=0,batt_voltage=3.7))
         self.assertFalse(d['fix']);self.assertEqual(d['battery'],3.7)
+
+    def test_lan_is_opt_in_and_uses_explicit_local_addresses(self):
+        with patch('panel.local_ipv4_addresses',return_value=['127.0.0.1','192.168.1.20']):
+            bind,names,_=http_settings(False,8000)
+            self.assertEqual(bind,'127.0.0.1')
+            self.assertNotIn('192.168.1.20:8000',names)
+            bind,names,_=http_settings(True,8000)
+            self.assertEqual(bind,'0.0.0.0')
+            self.assertIn('192.168.1.20:8000',names)
+            self.assertNotIn('attacker.example:8000',names)
+            self.assertIn('192.168.1.20',http_settings(True,80)[1])
+
+    def test_lan_host_and_origin_validation(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),make_handler(self.hub,'token',set(),15))
+        port=server.server_address[1]
+        authority=f'192.168.1.20:{port}'
+        server.RequestHandlerClass=make_handler(self.hub,'token',{authority},15)
+        server.daemon_threads=True
+        t=threading.Thread(target=server.serve_forever,daemon=True);t.start()
+        base=f'http://127.0.0.1:{port}'
+        try:
+            with urllib.request.urlopen(urllib.request.Request(base,headers={'Host':authority}),timeout=3) as r:
+                self.assertEqual(r.status,200)
+            # Same-origin LAN prediction reaches validation rather than a 403.
+            for origin,token,expected in [('http://'+authority,'token',400),
+                                          ('http://attacker.example','token',403),
+                                          ('http://'+authority,'wrong',403)]:
+                req=urllib.request.Request(base+'/predict',data=b'{"source":"invalid"}',
+                    headers={'Host':authority,'Origin':origin,'X-Token':token})
+                with self.assertRaises(urllib.error.HTTPError) as e:
+                    urllib.request.urlopen(req,timeout=3)
+                self.assertEqual(e.exception.code,expected)
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(urllib.request.Request(base,headers={'Host':'attacker.example'}),timeout=3)
+            self.assertEqual(e.exception.code,403)
+        finally:
+            server.shutdown();server.server_close();t.join()
 
     def test_raw_logs_are_separate_and_include_duplicate_frames(self):
         packet=dict(callsign='HAWK',sequence_number=12,latitude=52,longitude=21,

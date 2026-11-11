@@ -132,7 +132,11 @@ Dźwięk na 7355 nadal odbiera wtedy Horus GUI. UDP summary może zawierać mnie
 pól niż pełny dekoder; brakujące pomiary pokazują „—”. `--callsign ''` przyjmuje
 dowolny znak, ale panel ma jedną serię RS41 — stosuj filtr przy wielu sondach.
 
-Panel nasłuchuje wyłącznie na localhost. Zachowano token komend i potwierdzenie FIRE
+Domyślnie panel nasłuchuje wyłącznie na localhost. Opcja `--lan` włącza dostęp
+po IPv4 w sieci lokalnej i wypisuje adresy laptopa. Urządzenia mające dostęp do strony
+mogą również wydawać komendy, dlatego jest to tryb dla zaufanej sieci.
+Przykłady i konfiguracja zapory Fedory: sekcja „Dostęp przez Wi-Fi / LAN” w README.
+Zachowano token komend, kontrolę Host/Origin i potwierdzenie FIRE
 z dotychczasowego panelu. Firmware, uwierzytelnianie radiowe, automatyczne pingi
 i failsafe nie zostały zmienione.
 
