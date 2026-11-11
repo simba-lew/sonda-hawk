@@ -1,0 +1,2 @@
+pyserial==3.5
+horusdemodlib==0.6.2
