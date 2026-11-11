@@ -305,6 +305,18 @@ def main():
     token = secrets.token_urlsafe(24)
     bind_host, host_names, addresses = http_settings(args.lan, args.http_port)
 
+    # Reserve the HTTP port before starting USB or a decoder child process.
+    # A second panel instance must fail without disturbing the first instance.
+    try:
+        server = ThreadingHTTPServer((bind_host, args.http_port), make_handler(hub, token, host_names, args.arm_window))
+    except OSError as e:
+        hub.flight.close()
+        hub.log_file.close()
+        hub.rs41_log_file.close()
+        sys.exit(f'Nie można uruchomić strony na porcie {args.http_port}: {e}. '
+                 'Zatrzymaj poprzedni panel (Ctrl+C). Inny port strony: --http-port 8001.')
+    server.daemon_threads = True
+
     if port:
         threading.Thread(target=serial_loop, args=(hub, port, args.baud), daemon=True).start()
     else:
@@ -318,8 +330,6 @@ def main():
         threading.Thread(target=hub.flight.summary_loop, args=(args.summary_port,), daemon=True).start()
     else:
         hub.flight.radio_status(detail="RS41 wyłączone")
-    server = ThreadingHTTPServer((bind_host, args.http_port), make_handler(hub, token, host_names, args.arm_window))
-    server.daemon_threads = True
     print(f"panel: http://127.0.0.1:{args.http_port}   log: {log_path}   (Ctrl+C to stop)")
     if args.lan:
         for address in addresses:

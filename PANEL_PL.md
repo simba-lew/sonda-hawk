@@ -110,6 +110,25 @@ Wartość prędkości opadania nadal odnosi się do poziomu morza.
 
 ## Przydatne tryby
 
+### Błąd „Address already in use”
+
+Port 8000 jest używany przez stronę panelu, a UDP 7355 przez dekoder audio.
+Zatrzymaj poprzedni panel przez Ctrl+C i zamknij Horus GUI przed odbiorem audio
+w nowym panelu. Zamknięcie samej karty przeglądarki nie zatrzymuje serwera.
+
+Procesy zajmujące porty można sprawdzić poleceniami:
+
+```bash
+ss -ltnp 'sport = :8000'
+ss -lunp 'sport = :7355'
+```
+
+Inny port strony można wybrać przez `--http-port 8001`, ale to nie rozwiązuje
+zajętości portu audio ani portu USB. Tryb `sonda-demo --lan --http-port 8001`
+nie korzysta z audio ani USB i nadaje się do oddzielnego sprawdzenia strony.
+Panel rezerwuje port HTTP przed uruchomieniem dekodera i USB; gdy jest zajęty,
+kończy działanie czytelnym komunikatem.
+
 ```bash
 # Syntetyczny lot; bez sprzętu i bez możliwości wysyłania komend:
 python scripts/panel.py --demo
