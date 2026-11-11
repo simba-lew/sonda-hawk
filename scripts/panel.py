@@ -168,7 +168,7 @@ def make_handler(hub, token, host_names, arm_window_s):
             if self.path == "/":
                 page = PAGE.replace("__TOKEN__", token).replace("__ARM_WINDOW__", str(arm_window_s))
                 return self._reply(200, page, "text/html; charset=utf-8")
-            assets = {"/dashboard.js": "dashboard.js", "/leaflet.js": "leaflet.js", "/leaflet.css": "leaflet.css"}
+            assets = {"/dashboard.js": "dashboard.js", "/thermal.js": "thermal.js", "/leaflet.js": "leaflet.js", "/leaflet.css": "leaflet.css"}
             if self.path in assets:
                 asset = Path(__file__).parent / "web" / assets[self.path]
                 ctype = "text/css" if asset.suffix == ".css" else "application/javascript"
@@ -305,6 +305,18 @@ def main():
     token = secrets.token_urlsafe(24)
     bind_host, host_names, addresses = http_settings(args.lan, args.http_port)
 
+    # Reserve the HTTP port before starting USB or a decoder child process.
+    # A second panel instance must fail without disturbing the first instance.
+    try:
+        server = ThreadingHTTPServer((bind_host, args.http_port), make_handler(hub, token, host_names, args.arm_window))
+    except OSError as e:
+        hub.flight.close()
+        hub.log_file.close()
+        hub.rs41_log_file.close()
+        sys.exit(f'Nie można uruchomić strony na porcie {args.http_port}: {e}. '
+                 'Zatrzymaj poprzedni panel (Ctrl+C). Inny port strony: --http-port 8001.')
+    server.daemon_threads = True
+
     if port:
         threading.Thread(target=serial_loop, args=(hub, port, args.baud), daemon=True).start()
     else:
@@ -318,8 +330,6 @@ def main():
         threading.Thread(target=hub.flight.summary_loop, args=(args.summary_port,), daemon=True).start()
     else:
         hub.flight.radio_status(detail="RS41 wyłączone")
-    server = ThreadingHTTPServer((bind_host, args.http_port), make_handler(hub, token, host_names, args.arm_window))
-    server.daemon_threads = True
     print(f"panel: http://127.0.0.1:{args.http_port}   log: {log_path}   (Ctrl+C to stop)")
     if args.lan:
         for address in addresses:
@@ -479,7 +489,10 @@ PAGE = r"""<!doctype html>
   <section class="card">
     <div class="controls"><h2 style="margin:0">Lot na żywo</h2><a href="/telemetry.csv" download>Pobierz CSV</a><a href="/telemetry.jsonl" download>Pobierz JSONL</a><label class="hint"><input type="checkbox" id="chart-hour" checked> Ostatnie 60 minut</label></div>
     <div class="legend"><span class="rs" data-source="rs41">● RS41</span><span class="tb" data-source="tbeam">● T-Beam</span></div>
+    <label class="hint"><input type="checkbox" id="show-diagnostics"> Pokaż wykresy diagnostyczne RS41 (temperatura wewnętrzna i napięcie)</label>
+    <p id="thermal-summary" class="hint" hidden></p>
     <div class="flightgrid" id="charts"></div>
+    <p class="hint">Temperatura T-Beama pochodzi z wnętrza gondoli, a zewnętrzna RS41 z otoczenia. ΔT łączy najbliższe próbki według czasu odbioru (do 8 s); nie uzupełnia luk. Nie jest pomiarem współczynnika izolacji ani strumienia ciepła.</p>
   </section>
   <section class="card">
     <div class="controls"><h2 style="margin:0">Mapa i predykcja</h2><button class="small" id="fit-map">Pokaż cały lot</button><label class="hint"><input type="checkbox" id="follow-map" checked> Śledź pozycję</label><label class="hint"><input type="checkbox" id="map-online"> Włącz podkład mapy (internet)</label></div>
@@ -666,6 +679,7 @@ es.addEventListener("status", e => {
 });
 es.onerror = () => { $("conn").textContent = "panel server not reachable"; $("conn").className = "pill bad"; connected = false; };
 </script>
+<script src="/thermal.js"></script>
 <script src="/dashboard.js"></script>
 </body>
 </html>

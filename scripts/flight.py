@@ -44,7 +44,7 @@ def ground_packet(line):
     v = m.groups()
     return dict(source='tbeam', callsign='T-Beam', seq=int(v[0]), fix=v[1] == 'true',
                 latitude=number(v[2]), longitude=number(v[3]), altitude=number(v[4]),
-                pressure=number(v[5]), temperature=number(v[6]), humidity=number(v[7]),
+                pressure=number(v[5]), temperature=number(v[6]), internal_temperature=number(v[6]), humidity=number(v[7]),
                 rssi=number(v[8]), snr=number(v[9]))
 
 

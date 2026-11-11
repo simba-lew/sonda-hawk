@@ -34,6 +34,8 @@ Z podłączoną stacją naziemną i dźwiękiem z SDRangela:
 Horus GUI powinno być zamknięte, ponieważ panel sam dekoduje dźwięk UDP
 na 127.0.0.1:7355. Port USB może mieć inną nazwę.
 Pełna instrukcja ustawień i predykcji: [PANEL_PL.md](PANEL_PL.md).
+Znaczenie kanałów temperatury, wykres ΔT i proponowana kolejność badań gondoli:
+[BADANIA_PL.md](BADANIA_PL.md).
 
 ## Skróty w terminalu
 

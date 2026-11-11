@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const {compare,inside}=require('../web/thermal.js');
+const inner=[{received_at:10,internal_temperature:20,temperature:999},{received_at:20,temperature:18},{received_at:100,temperature:15}];
+const outer=[{received_at:8,temperature:-10},{received_at:21,temperature:-15}];
+const result=compare(inner,outer);
+assert.equal(result.length,2);
+assert.equal(result[0].delta_temperature,30);
+assert.equal(result[1].delta_temperature,33);
+assert.equal(result[1].time_skew_s,1);
+assert.equal(inside(inner[0]),20);
+assert.deepEqual(compare(inner,[]),[]);
+assert.deepEqual(compare([{received_at:10,temperature:NaN}],outer),[]);
+assert.equal(compare([{received_at:10,temperature:20}],[{received_at:18,temperature:5}]).length,1);
+assert.equal(compare([{received_at:10,temperature:20}],[{received_at:18.01,temperature:5}]).length,0);
+console.log('Thermal pairing OK: nearest sample, 8-second limit, missing/invalid values, correct subtraction and inside sensor.');

@@ -64,8 +64,12 @@ i nie udaje prawdziwych ramek HEX. Logi dotyczą zdekodowanych ramek, nie nagran
 
 - Dotychczasowe komendy ARM, FIRE, DISARM, POKE oraz log stacji naziemnej.
 - Oddzielne odczyty RS41 i T-Beama, czas od ostatniego pakietu i status audio.
-- Dziewięć wykresów: wysokość, temperatura zewnętrzna, ciśnienie, wilgotność,
-  prędkość pionowa, SNR, temperatura wewnętrzna RS41, temperatura dodatkowa RS41 i napięcie.
+- Wykresy: wysokość, temperatura (T-Beam: wnętrze gondoli, RS41: otoczenie),
+  ciśnienie, wilgotność, prędkość pionowa i SNR. W porównaniu dochodzi ΔT wnętrze
+  minus otoczenie z doborem próbek do 8 s odstępu odbioru. Osie czasu są wspólne.
+  Wykresy diagnostyczne temperatury wewnętrznej RS41 i napięcia są domyślnie ukryte.
+  Nieopisany kanał dodatkowej temperatury pozostaje tylko w danych, nie w widoku.
+  Propozycje badań i interpretacja: `BADANIA_PL.md`.
 - Pozycje i ślady obu źródeł. „Włącz podkład mapy” pobiera kafelki OpenStreetMap;
   bez internetu nadal widać ślady na pustym podkładzie. Nie ma pobierania map na zapas.
 - Wykresy i biblioteka mapy są lokalne, bez zależności od CDN przy uruchomieniu.
@@ -109,6 +113,25 @@ tylko fazę opadania. To przybliżenie, podobne do rozwiązania w ChaseMapper.
 Wartość prędkości opadania nadal odnosi się do poziomu morza.
 
 ## Przydatne tryby
+
+### Błąd „Address already in use”
+
+Port 8000 jest używany przez stronę panelu, a UDP 7355 przez dekoder audio.
+Zatrzymaj poprzedni panel przez Ctrl+C i zamknij Horus GUI przed odbiorem audio
+w nowym panelu. Zamknięcie samej karty przeglądarki nie zatrzymuje serwera.
+
+Procesy zajmujące porty można sprawdzić poleceniami:
+
+```bash
+ss -ltnp 'sport = :8000'
+ss -lunp 'sport = :7355'
+```
+
+Inny port strony można wybrać przez `--http-port 8001`, ale to nie rozwiązuje
+zajętości portu audio ani portu USB. Tryb `sonda-demo --lan --http-port 8001`
+nie korzysta z audio ani USB i nadaje się do oddzielnego sprawdzenia strony.
+Panel rezerwuje port HTTP przed uruchomieniem dekodera i USB; gdy jest zajęty,
+kończy działanie czytelnym komunikatem.
 
 ```bash
 # Syntetyczny lot; bez sprzętu i bez możliwości wysyłania komend:
